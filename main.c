@@ -8,10 +8,6 @@
 #define LCD_EN  BIT2
 #define LCD_BL  BIT3
 
-#define RATE_USD_CENT 20
-#define RATE_EUR_CENT 18
-#define RATE_BTC_SAT 50
-
 uint8_t i2cSend(uint8_t addr, uint8_t data) {
     while (UCB0CTL1 & UCTXSTP);
     UCB0I2CSA = addr;
@@ -117,45 +113,46 @@ void chooseCoin(int step) {
         case 3:
             lcdWrite("BitCoin\n");
             break;
+        case 4:
+            lcdWrite("Yen\n");
+            break;
     }
 }
 
-void calculateConversion(int coin, int amountCents, int* intPart, int* decPart) {
+void calculateConversion(int coin, long amountCents, int* intPart, int* decPart) {
+    long result;
+    
     switch(coin) {
-        case 1:
-            {
-                long totalUSDCents = ((long)amountCents * 20L) / 100L;
-                *intPart = (int)(totalUSDCents / 100L);
-                *decPart = (int)(totalUSDCents % 100L);
-            }
+        case 1: // Dólar
+            result = (amountCents * 18L) / 100L;
             break;
-        case 2:
-            {
-                long totalEURCents = ((long)amountCents * 18L) / 100L;
-                *intPart = (int)(totalEURCents / 100L);
-                *decPart = (int)(totalEURCents % 100L);
-            }
+        case 2: // Euro
+            result = (amountCents * 15L) / 100L;
             break;
-        case 3:
-            {
-                long satoshis = ((long)amountCents * 5L) / 100000L;
-                *intPart = (int)satoshis;
-                *decPart = 0;
-            }
+        case 3: // Bitcoin
+            result = amountCents / 20000L;
+            if (result == 0 && amountCents > 0) result = 1;
+            *intPart = (int)result;
+            *decPart = 0;
+            return;
+        case 4: 
+            result = (amountCents * 2600L) / 100L;
             break;
         default:
-            *intPart = amountCents / 100;
-            *decPart = amountCents % 100;
+            result = amountCents;
     }
+    
+    *intPart = (int)(result / 100L);
+    *decPart = (int)(result % 100L);
 }
 
-void showResult(int coin, int amountCents, int intPart, int decPart) {
+void showResult(int coin, long amountCents, int intPart, int decPart) {
     char buffer[32];
 
     lcdClear();
 
-    int brlInt = amountCents / 100;
-    int brlDec = amountCents % 100;
+    int brlInt = (int)(amountCents / 100L);
+    int brlDec = (int)(amountCents % 100L);
     if (brlDec < 10) {
         sprintf(buffer, "BRL %d.0%d = \n", brlInt, brlDec);
     } else {
@@ -180,6 +177,13 @@ void showResult(int coin, int amountCents, int intPart, int decPart) {
             break;
         case 3:
             sprintf(buffer, "BTC %d sat\n", intPart);
+            break;
+        case 4:
+            if (decPart < 10) {
+                sprintf(buffer, "JPY %d.0%d\n", intPart, decPart);
+            } else {
+                sprintf(buffer, "JPY %d.%d\n", intPart, decPart);
+            }
             break;
     }
     lcdWrite(buffer);
@@ -220,7 +224,7 @@ void main(void) {
             if (xValue > 110 && xValue < 140) {
                 lastXDir = 0;
             } else if (xValue >= 180 && lastXDir != 1) {
-                if (coin < 3) coin++;
+                if (coin < 4) coin++;
                 lcdClear();
                 chooseCoin(coin);
                 lastXDir = 1;
@@ -297,7 +301,7 @@ void main(void) {
                 lcdWriteByte(0xC0, 0);
                 lcdWrite(cursorLine);
             } else if (fase == 1) {
-                int amountCents = valor[0]*10000 + valor[1]*1000 + valor[2]*100 + valor[3]*10 + valor[4];
+                long amountCents = (long)valor[0]*10000L + (long)valor[1]*1000L + (long)valor[2]*100L + (long)valor[3]*10L + (long)valor[4];
                 calculateConversion(selected, amountCents, &convertedInt, &convertedDec);
                 showResult(selected, amountCents, convertedInt, convertedDec);
                 fase = 2;
